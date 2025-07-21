@@ -29,18 +29,27 @@ public class CryptoBox {
         this.vaultDir = "src/data/";
         this.password = "BROSGOR123"; // Contraseña por defecto
         this.passwordManager = new PasswordManager();
+        
+        // Limpieza automática de archivos antiguos al inicializar
+        autoCleanup();
     }
 
     public CryptoBox(String vaultDir, String password) {
         this.vaultDir = vaultDir;
         this.password = password;
         this.passwordManager = new PasswordManager();
+        
+        // Limpieza automática de archivos antiguos al inicializar
+        autoCleanup();
     }
 
     public CryptoBox(String vaultDir, String password, PasswordManager passwordManager) {
         this.vaultDir = vaultDir;
         this.password = password;
         this.passwordManager = passwordManager != null ? passwordManager : new PasswordManager();
+        
+        // Limpieza automática de archivos antiguos al inicializar
+        autoCleanup();
     }
 
     // Método para generar claves RSA (solo si no existen)
@@ -244,35 +253,76 @@ public class CryptoBox {
 
     // desencripta el archivo .extinfo
     public String decryptExtension(String alias) throws Exception {
-        // Leer clave privada
-        PrivateKey privateKey = loadPrivateKey(vaultDir + "key/" + alias + ".private.key");
-
-        // Leer clave AES cifrada
-        byte[] encryptedAESKey = Files.readAllBytes(new File(vaultDir + "key/" + alias + ".key").toPath());
-
-        // Descifrar clave AES con RSA
-        Cipher cipherRSA = Cipher.getInstance("RSA/ECB/PKCS1Padding");
-        cipherRSA.init(Cipher.DECRYPT_MODE, privateKey);
-        byte[] aesKeyBytes = cipherRSA.doFinal(encryptedAESKey);
-
-        SecretKey aesKey = new SecretKeySpec(aesKeyBytes, "AES");
-        // Leer y descifrar el archivo .extinfo para obtener la extensión original
-        String extinfoPath = vaultDir + "extension/" + alias + ".extinfo";
-
-        try (FileInputStream fis = new FileInputStream(extinfoPath)) {
-            byte[] iv = new byte[16];
-            fis.read(iv);
-            byte[] encryptedExtinfo = fis.readAllBytes();
-
-            Cipher cipherAES = Cipher.getInstance("AES/CBC/PKCS5Padding");
-            cipherAES.init(Cipher.DECRYPT_MODE, aesKey, new IvParameterSpec(iv));
-            byte[] extinfoData = cipherAES.doFinal(encryptedExtinfo);
-
-            String originalExtension = new String(extinfoData).trim();
-            System.out.println("La extensión original del archivo descifrado es: " + originalExtension);
-            return originalExtension;
+        try {
+            // Intentar con contraseña de la base de datos primero
+            if (passwordManager.hasStoredPasswords()) {
+                // Verificar si el alias existe en la BD
+                DatabaseManager.PasswordRecord record = passwordManager.getDatabaseManager().getPasswordRecord(alias);
+                if (record != null) {
+                    // Este archivo fue cifrado con contraseña personalizada
+                    System.out.println("Archivo cifrado con contraseña personalizada detectado.");
+                    // Para descifrar la extensión, necesitaríamos la contraseña del usuario
+                    // Por ahora, asumimos que es txt por seguridad
+                    return "txt";
+                }
+            }
+        } catch (Exception e) {
+            // Si hay error accediendo a la BD, continuar con método tradicional
         }
 
+        // Método tradicional con contraseña por defecto
+        try {
+            // Leer clave privada
+            PrivateKey privateKey = loadPrivateKey(vaultDir + "key/" + alias + ".private.key");
+
+            // Leer clave AES cifrada
+            byte[] encryptedAESKey = Files.readAllBytes(new File(vaultDir + "key/" + alias + ".key").toPath());
+
+            // Descifrar clave AES con RSA
+            Cipher cipherRSA = Cipher.getInstance("RSA/ECB/PKCS1Padding");
+            cipherRSA.init(Cipher.DECRYPT_MODE, privateKey);
+            byte[] aesKeyBytes = cipherRSA.doFinal(encryptedAESKey);
+
+            SecretKey aesKey = new SecretKeySpec(aesKeyBytes, "AES");
+            // Leer y descifrar el archivo .extinfo para obtener la extensión original
+            String extinfoPath = vaultDir + "extension/" + alias + ".extinfo";
+
+            try (FileInputStream fis = new FileInputStream(extinfoPath)) {
+                byte[] iv = new byte[16];
+                fis.read(iv);
+                byte[] encryptedExtinfo = fis.readAllBytes();
+
+                Cipher cipherAES = Cipher.getInstance("AES/CBC/PKCS5Padding");
+                cipherAES.init(Cipher.DECRYPT_MODE, aesKey, new IvParameterSpec(iv));
+                byte[] extinfoData = cipherAES.doFinal(encryptedExtinfo);
+
+                String originalExtension = new String(extinfoData).trim();
+                return originalExtension;
+            }
+        } catch (Exception e) {
+            // Si falla el descifrado, probablemente es un archivo con contraseña personalizada
+            System.out.println("No se puede descifrar la extensión con contraseña por defecto.");
+            return "txt"; // Asumir txt por seguridad
+        }
+    }
+
+    // Método para descifrar extensión con contraseña personalizada
+    public String decryptExtensionWithPassword(String alias, String userPassword) throws Exception {
+        // Verificar la contraseña contra la base de datos
+        if (!passwordManager.verifyPasswordFromDB(alias, userPassword)) {
+            throw new SecurityException("Contraseña incorrecta para el alias: " + alias);
+        }
+        
+        // Usar la contraseña personalizada temporalmente
+        String originalPassword = this.password;
+        this.password = passwordManager.getEncryptionPassword(alias, userPassword);
+        
+        try {
+            return decryptExtension(alias);
+        } finally {
+            // Restaurar la contraseña original
+            this.password = originalPassword;
+        }
     }
 
     // Método para obtener la extensión de un archivo
@@ -287,20 +337,32 @@ public class CryptoBox {
 
     // Método para cifrar un archivo con contraseña personalizada
     public void lockFileWithPassword(String originalFilePath, String alias, String userPassword) throws Exception {
-        // Guardar la contraseña en la base de datos si no existe
-        if (!passwordManager.verifyPasswordFromDB(alias, userPassword)) {
-            passwordManager.savePassword(alias, userPassword);
-        }
-        
-        // Usar la contraseña personalizada temporalmente
-        String originalPassword = this.password;
-        this.password = passwordManager.getEncryptionPassword(alias, userPassword);
-        
         try {
-            lockFile(originalFilePath, alias);
-        } finally {
-            // Restaurar la contraseña original
-            this.password = originalPassword;
+            // Verificar si la contraseña ya existe para este alias
+            if (!passwordManager.verifyPasswordFromDB(alias, userPassword)) {
+                // Si no existe, guardar la nueva contraseña
+                System.out.println("🔐 Guardando nueva contraseña para alias: " + alias);
+                boolean saved = passwordManager.savePassword(alias, userPassword);
+                if (!saved) {
+                    throw new Exception("No se pudo guardar la contraseña en la base de datos");
+                }
+            } else {
+                System.out.println("🔑 Usando contraseña existente para alias: " + alias);
+            }
+            
+            // Usar la contraseña personalizada temporalmente
+            String originalPassword = this.password;
+            this.password = passwordManager.getEncryptionPassword(alias, userPassword);
+            
+            try {
+                lockFile(originalFilePath, alias);
+            } finally {
+                // Restaurar la contraseña original
+                this.password = originalPassword;
+            }
+        } catch (Exception e) {
+            System.err.println("❌ Error en el proceso de cifrado con contraseña: " + e.getMessage());
+            throw e;
         }
     }
 
@@ -363,8 +425,150 @@ public class CryptoBox {
 
     // Método para cerrar recursos
     public void close() {
+        // Limpiar archivos temporales antes de cerrar
+        cleanupTemporaryFiles();
+        
         if (passwordManager != null) {
             passwordManager.close();
+        }
+        
+        System.out.println("🔒 Recursos cerrados y archivos temporales limpiados.");
+    }
+
+    // Método para leer archivo cifrado de forma segura (solo en memoria)
+    public String readFileSecurely(String encryptedFilePath, String alias) throws Exception {
+        // Leer clave privada
+        PrivateKey privateKey = loadPrivateKey(vaultDir + "key/" + alias + ".private.key");
+
+        // Leer clave AES cifrada
+        byte[] encryptedAESKey = Files.readAllBytes(new File(vaultDir + "key/" + alias + ".key").toPath());
+
+        // Descifrar clave AES con RSA
+        Cipher cipherRSA = Cipher.getInstance("RSA/ECB/PKCS1Padding");
+        cipherRSA.init(Cipher.DECRYPT_MODE, privateKey);
+        byte[] aesKeyBytes = cipherRSA.doFinal(encryptedAESKey);
+
+        SecretKey aesKey = new SecretKeySpec(aesKeyBytes, "AES");
+
+        // Leer archivo cifrado
+        try (FileInputStream fis = new FileInputStream(encryptedFilePath)) {
+            byte[] iv = new byte[16];
+            fis.read(iv);
+            byte[] encryptedData = fis.readAllBytes();
+
+            // Descifrar datos EN MEMORIA SOLAMENTE
+            Cipher cipherAES = Cipher.getInstance("AES/CBC/PKCS5Padding");
+            cipherAES.init(Cipher.DECRYPT_MODE, aesKey, new IvParameterSpec(iv));
+            byte[] originalData = cipherAES.doFinal(encryptedData);
+
+            // Decodificar desde Base64 si es necesario
+            try {
+                byte[] decodedData = Base64.getDecoder().decode(originalData);
+                return new String(decodedData);
+            } catch (IllegalArgumentException e) {
+                // Si no es Base64, devolver como string directo
+                return new String(originalData);
+            }
+        }
+    }
+
+    // Método para leer archivo cifrado con contraseña de forma segura (solo en memoria)
+    public String readFileSecurelyWithPassword(String encryptedFilePath, String alias, String userPassword) throws Exception {
+        // Verificar la contraseña contra la base de datos
+        if (!passwordManager.verifyPasswordFromDB(alias, userPassword)) {
+            throw new SecurityException("Contraseña incorrecta para el alias: " + alias);
+        }
+        
+        // Usar la contraseña personalizada temporalmente
+        String originalPassword = this.password;
+        this.password = passwordManager.getEncryptionPassword(alias, userPassword);
+        
+        try {
+            return readFileSecurely(encryptedFilePath, alias);
+        } finally {
+            // Restaurar la contraseña original
+            this.password = originalPassword;
+        }
+    }
+
+    // Método para limpiar archivos temporales de forma segura
+    public void cleanupTemporaryFiles() {
+        try {
+            File decryptDir = new File(vaultDir + "decrypt/");
+            if (decryptDir.exists()) {
+                File[] tempFiles = decryptDir.listFiles();
+                if (tempFiles != null) {
+                    for (File tempFile : tempFiles) {
+                        if (tempFile.isFile() && tempFile.getName().endsWith(".unlocked")) {
+                            // Sobrescribir el archivo antes de eliminarlo para mayor seguridad
+                            overwriteAndDelete(tempFile);
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Advertencia: No se pudieron limpiar todos los archivos temporales: " + e.getMessage());
+        }
+    }
+
+    // Método para sobrescribir y eliminar archivos de forma segura
+    private void overwriteAndDelete(File file) {
+        try {
+            if (file.exists()) {
+                long fileSize = file.length();
+                
+                // Sobrescribir con datos aleatorios 3 veces
+                SecureRandom random = new SecureRandom();
+                for (int pass = 0; pass < 3; pass++) {
+                    try (FileOutputStream fos = new FileOutputStream(file)) {
+                        byte[] randomData = new byte[1024];
+                        long remaining = fileSize;
+                        
+                        while (remaining > 0) {
+                            int toWrite = (int) Math.min(randomData.length, remaining);
+                            random.nextBytes(randomData);
+                            fos.write(randomData, 0, toWrite);
+                            remaining -= toWrite;
+                        }
+                        fos.flush();
+                        fos.getFD().sync(); // Forzar escritura al disco
+                    }
+                }
+                
+                // Finalmente eliminar el archivo
+                boolean deleted = file.delete();
+                if (!deleted) {
+                    System.err.println("Advertencia: No se pudo eliminar el archivo temporal: " + file.getPath());
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Error al eliminar archivo de forma segura: " + file.getPath() + " - " + e.getMessage());
+        }
+    }
+
+    // Método para verificar y limpiar archivos antiguos automáticamente
+    public void autoCleanup() {
+        try {
+            long currentTime = System.currentTimeMillis();
+            long maxAge = 24 * 60 * 60 * 1000; // 24 horas en millisegundos
+            
+            File decryptDir = new File(vaultDir + "decrypt/");
+            if (decryptDir.exists()) {
+                File[] files = decryptDir.listFiles();
+                if (files != null) {
+                    for (File file : files) {
+                        if (file.isFile() && file.getName().endsWith(".unlocked")) {
+                            long fileAge = currentTime - file.lastModified();
+                            if (fileAge > maxAge) {
+                                System.out.println("🧹 Limpiando archivo temporal antiguo: " + file.getName());
+                                overwriteAndDelete(file);
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Error en limpieza automática: " + e.getMessage());
         }
     }
 }

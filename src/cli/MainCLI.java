@@ -35,11 +35,12 @@ public class MainCLI {
                 System.out.println("2. Cifrar un archivo con contraseña personalizada");
                 System.out.println("3. Descifrar un archivo (modo básico)");
                 System.out.println("4. Descifrar un archivo con contraseña personalizada");
-                System.out.println("5. Leer un archivo .lock en la consola");
-                System.out.println("6. Cambiar la extensión de un archivo .unlocked");
-                System.out.println("7. Gestionar contraseñas");
-                System.out.println("8. Ver aliases almacenados");
-                System.out.println("9. Salir");
+                System.out.println("5. 👁️  Leer archivo cifrado (solo memoria, seguro)");
+                System.out.println("6. 👁️  Leer archivo cifrado con contraseña (solo memoria)");
+                System.out.println("7. Cambiar la extensión de un archivo .unlocked");
+                System.out.println("8. Gestionar contraseñas");
+                System.out.println("9. Ver aliases almacenados");
+                System.out.println("10. Salir");
 
                 String option = scanner.nextLine();
 
@@ -48,10 +49,26 @@ public class MainCLI {
                         Utils.clearConsole();
                         File sourceFile = Utils.listFiles(ORIGINALS_DIR, scanner);
                         if (sourceFile != null) {
-                            System.out.print("Ingresa el nombre del archivo cifrado (sin extensión): ");
-                            String encryptedFileName = scanner.nextLine();
-                            cipherBox.lockFile(sourceFile.getPath(), encryptedFileName);
-                            System.out.println("Archivo cifrado exitosamente.");
+                            String originalName = sourceFile.getName();
+                            String nameWithoutExt = originalName.contains(".") ? 
+                                originalName.substring(0, originalName.lastIndexOf('.')) : originalName;
+                            
+                            System.out.println("Archivo seleccionado: " + originalName);
+                            System.out.print("Nombre del archivo cifrado [" + nameWithoutExt + "]: ");
+                            String encryptedFileName = scanner.nextLine().trim();
+                            
+                            // Si está vacío, usar el nombre del archivo original
+                            if (encryptedFileName.isEmpty()) {
+                                encryptedFileName = nameWithoutExt;
+                            }
+                            
+                            try {
+                                cipherBox.lockFile(sourceFile.getPath(), encryptedFileName);
+                                System.out.println("✅ Archivo cifrado exitosamente como: " + encryptedFileName + ".lock");
+                            } catch (Exception e) {
+                                System.err.println("❌ Error al cifrar el archivo: " + e.getMessage());
+                                e.printStackTrace();
+                            }
                             Utils.pauseForKeyPress(scanner);
                         }
                         break;
@@ -59,12 +76,37 @@ public class MainCLI {
                         Utils.clearConsole();
                         File sourceFileCustom = Utils.listFiles(ORIGINALS_DIR, scanner);
                         if (sourceFileCustom != null) {
-                            System.out.print("Ingresa el nombre del archivo cifrado (sin extensión): ");
-                            String encryptedFileNameCustom = scanner.nextLine();
+                            String originalName = sourceFileCustom.getName();
+                            String nameWithoutExt = originalName.contains(".") ? 
+                                originalName.substring(0, originalName.lastIndexOf('.')) : originalName;
+                            
+                            System.out.println("Archivo seleccionado: " + originalName);
+                            System.out.print("Nombre del archivo cifrado [" + nameWithoutExt + "]: ");
+                            String encryptedFileNameCustom = scanner.nextLine().trim();
+                            
+                            // Si está vacío, usar el nombre del archivo original
+                            if (encryptedFileNameCustom.isEmpty()) {
+                                encryptedFileNameCustom = nameWithoutExt;
+                            }
+                            
                             System.out.print("Ingresa tu contraseña personalizada: ");
                             String userPassword = scanner.nextLine();
-                            cipherBox.lockFileWithPassword(sourceFileCustom.getPath(), encryptedFileNameCustom, userPassword);
-                            System.out.println("Archivo cifrado exitosamente con contraseña personalizada.");
+                            
+                            if (userPassword.trim().isEmpty()) {
+                                System.out.println("❌ La contraseña no puede estar vacía.");
+                                Utils.pauseForKeyPress(scanner);
+                                break;
+                            }
+                            
+                            try {
+                                cipherBox.lockFileWithPassword(sourceFileCustom.getPath(), encryptedFileNameCustom, userPassword);
+                                System.out.println("✅ Archivo cifrado exitosamente con contraseña personalizada como: " + encryptedFileNameCustom + ".lock");
+                            } catch (SecurityException e) {
+                                System.err.println("❌ Error de seguridad: " + e.getMessage());
+                            } catch (Exception e) {
+                                System.err.println("❌ Error al cifrar el archivo: " + e.getMessage());
+                                e.printStackTrace();
+                            }
                             Utils.pauseForKeyPress(scanner);
                         }
                         break;
@@ -72,15 +114,32 @@ public class MainCLI {
                         Utils.clearConsole();
                         File encryptedFile = Utils.listFiles(DATA_DIR_ENCRYPT, scanner);
                         if (encryptedFile != null) {
-                            System.out.print("Ingresa el nombre del archivo descifrado (con extensión): ");
-                            String decryptedFileName = scanner.nextLine();
-                            DataFile data = cipherBox.unlockFile(encryptedFile.getPath(), decryptedFileName);
-                            System.out.println("Archivo descifrado exitosamente. La extensión del archivo es: " +
-                                    data.getExtension());
+                            String aliasFromFileName = encryptedFile.getName().split("\\.")[0];
+                            System.out.println("Archivo cifrado seleccionado: " + encryptedFile.getName());
+                            System.out.print("Nombre del archivo descifrado [" + aliasFromFileName + "]: ");
+                            String decryptedFileName = scanner.nextLine().trim();
+                            
+                            // Si está vacío, usar el alias del archivo
+                            if (decryptedFileName.isEmpty()) {
+                                decryptedFileName = aliasFromFileName;
+                            }
+                            
+                            try {
+                                DataFile data = cipherBox.unlockFile(encryptedFile.getPath(), decryptedFileName);
+                                System.out.println("✅ Archivo descifrado exitosamente. Extensión: " + data.getExtension());
 
-                            if ("txt".equalsIgnoreCase(data.getExtension())) {
-                                Utils.readFileIfText(data.getExtension(), data.getFile(), scanner);
-                            } else {
+                                if ("txt".equalsIgnoreCase(data.getExtension())) {
+                                    Utils.readFileIfText(data.getExtension(), data.getFile(), scanner);
+                                } else {
+                                    System.out.println("ℹ️  Archivo descifrado guardado en: " + data.getFile().getPath());
+                                    Utils.pauseForKeyPress(scanner);
+                                }
+                            } catch (SecurityException e) {
+                                System.err.println("❌ Error de seguridad: " + e.getMessage());
+                                Utils.pauseForKeyPress(scanner);
+                            } catch (Exception e) {
+                                System.err.println("❌ Error al descifrar el archivo: " + e.getMessage());
+                                System.err.println("💡 Verifica que tengas las claves correctas para este archivo.");
                                 Utils.pauseForKeyPress(scanner);
                             }
                         }
@@ -90,83 +149,175 @@ public class MainCLI {
                         File encryptedFileCustom = Utils.listFiles(DATA_DIR_ENCRYPT, scanner);
                         if (encryptedFileCustom != null) {
                             String aliasFromFile = encryptedFileCustom.getName().split("\\.")[0];
+                            System.out.println("Archivo cifrado seleccionado: " + encryptedFileCustom.getName());
                             System.out.print("Ingresa tu contraseña para el alias '" + aliasFromFile + "': ");
                             String userPasswordDecrypt = scanner.nextLine();
                             
+                            if (userPasswordDecrypt.trim().isEmpty()) {
+                                System.out.println("❌ La contraseña no puede estar vacía.");
+                                Utils.pauseForKeyPress(scanner);
+                                break;
+                            }
+                            
                             try {
                                 DataFile dataCustom = cipherBox.unlockFileWithPassword(encryptedFileCustom.getPath(), aliasFromFile, userPasswordDecrypt);
-                                System.out.println("Archivo descifrado exitosamente. La extensión del archivo es: " +
-                                        dataCustom.getExtension());
+                                System.out.println("✅ Archivo descifrado exitosamente. Extensión: " + dataCustom.getExtension());
 
                                 if ("txt".equalsIgnoreCase(dataCustom.getExtension())) {
                                     Utils.readFileIfText(dataCustom.getExtension(), dataCustom.getFile(), scanner);
                                 } else {
+                                    System.out.println("ℹ️  Archivo descifrado guardado en: " + dataCustom.getFile().getPath());
                                     Utils.pauseForKeyPress(scanner);
                                 }
                             } catch (SecurityException e) {
-                                System.out.println("Error: " + e.getMessage());
+                                System.err.println("❌ Error de autenticación: " + e.getMessage());
+                                System.err.println("💡 Verifica que la contraseña sea correcta.");
+                                Utils.pauseForKeyPress(scanner);
+                            } catch (Exception e) {
+                                System.err.println("❌ Error al descifrar el archivo: " + e.getMessage());
+                                System.err.println("💡 El archivo podría estar corrupto o usar una contraseña diferente.");
                                 Utils.pauseForKeyPress(scanner);
                             }
                         }
                         break;
                     case "5":
                         Utils.clearConsole();
+                        System.out.println("🔐 LECTURA SEGURA - Solo en memoria (no crea archivos)");
                         File lockedFile = Utils.listFiles(DATA_DIR_ENCRYPT, scanner);
                         if (lockedFile != null) {
                             String alias = lockedFile.getName().split("\\.")[0];
-                            DataFile data = cipherBox.unlockFile(lockedFile.getPath(), alias);
-                            String extension = data.getExtension();
-                            File unlockedFile = data.getFile();
-                            System.out.println("Archivo descifrado exitosamente. La extensión del archivo es: " +
-                                    data.getExtension());
-                            if ("txt".equalsIgnoreCase(data.getExtension())
-                                    || "unlocked".equalsIgnoreCase(data.getExtension())) {
-                                Utils.readFileIfText(extension, unlockedFile, scanner);
-                                // Leer el contenido del archivo .unlocked
-                                byte[] fileContent = Files.readAllBytes(unlockedFile.toPath());
-
-                                // Decodificar el contenido desde Base64
-                                byte[] decodedContent = Base64.getDecoder().decode(fileContent);
-
-                                // Escribir el contenido decodificado de nuevo en el archivo
-                                Files.write(unlockedFile.toPath(), decodedContent);
-
-                                // Continuar con el proceso de cifrado y eliminación del archivo
-                                cipherBox.lockFile(unlockedFile.getPath(), alias);
-                                unlockedFile.delete();
-
-                            } else {
-                                Utils.pauseForKeyPress(scanner);
+                            System.out.println("Archivo cifrado seleccionado: " + lockedFile.getName());
+                            
+                            try {
+                                // Obtener extensión original
+                                String extension = cipherBox.decryptExtension(alias);
+                                System.out.println("📄 Extensión original: " + extension);
+                                
+                                // Leer contenido de forma segura (solo en memoria)
+                                String content = cipherBox.readFileSecurely(lockedFile.getPath(), alias);
+                                
+                                System.out.println("\n📖 CONTENIDO DEL ARCHIVO (solo lectura):");
+                                System.out.println("========================================");
+                                
+                                // Mostrar contenido línea por línea para archivos de texto
+                                if ("txt".equalsIgnoreCase(extension) || extension.isEmpty()) {
+                                    String[] lines = content.split("\n");
+                                    for (int i = 0; i < lines.length; i++) {
+                                        System.out.printf("%d: %s\n", i + 1, lines[i]);
+                                    }
+                                } else {
+                                    // Para otros tipos, mostrar los primeros 500 caracteres
+                                    if (content.length() > 500) {
+                                        System.out.println(content.substring(0, 500) + "...");
+                                        System.out.println("\n[Contenido truncado - " + content.length() + " caracteres totales]");
+                                    } else {
+                                        System.out.println(content);
+                                    }
+                                }
+                                
+                                System.out.println("========================================");
+                                System.out.println("✅ Lectura completada. No se crearon archivos temporales.");
+                                
+                            } catch (SecurityException e) {
+                                System.err.println("❌ Error de seguridad: " + e.getMessage());
+                            } catch (Exception e) {
+                                System.err.println("❌ Error al leer el archivo: " + e.getMessage());
+                                System.err.println("💡 Verifica que tengas las claves correctas para este archivo.");
                             }
+                            
+                            Utils.pauseForKeyPress(scanner);
                         }
                         break;
                     case "6":
                         Utils.clearConsole();
-                        File unlockedFile = Utils.listFiles(DATA_DIR_DECRYPT, scanner);
-                        String alias = unlockedFile.getName().split("\\.")[0];
-                        if (unlockedFile != null) {
-                            String extension = cipherBox.decryptExtension(alias);
-                            System.out.print(
-                                    "La extensión original del archivo es: " + extension
-                                            + ". ¿Deseas cambiarla? (s/n): ");
-                            String choice2 = scanner.nextLine();
-                            if (choice2.equalsIgnoreCase("s")) {
-                                Utils.convertExtension(unlockedFile, extension);
+                        System.out.println("🔐 LECTURA SEGURA CON CONTRASEÑA - Solo en memoria");
+                        File encryptedFileSecure = Utils.listFiles(DATA_DIR_ENCRYPT, scanner);
+                        if (encryptedFileSecure != null) {
+                            String alias = encryptedFileSecure.getName().split("\\.")[0];
+                            System.out.println("Archivo cifrado seleccionado: " + encryptedFileSecure.getName());
+                            System.out.print("Ingresa tu contraseña para el alias '" + alias + "': ");
+                            String userPassword = scanner.nextLine();
+                            
+                            if (userPassword.trim().isEmpty()) {
+                                System.out.println("❌ La contraseña no puede estar vacía.");
+                                Utils.pauseForKeyPress(scanner);
+                                break;
                             }
+                            
+                            try {
+                                // Obtener extensión original
+                                String extension = cipherBox.decryptExtension(alias);
+                                System.out.println("📄 Extensión original: " + extension);
+                                
+                                // Leer contenido de forma segura con contraseña (solo en memoria)
+                                String content = cipherBox.readFileSecurelyWithPassword(encryptedFileSecure.getPath(), alias, userPassword);
+                                
+                                System.out.println("\n📖 CONTENIDO DEL ARCHIVO (solo lectura):");
+                                System.out.println("========================================");
+                                
+                                // Mostrar contenido línea por línea para archivos de texto
+                                if ("txt".equalsIgnoreCase(extension) || extension.isEmpty()) {
+                                    String[] lines = content.split("\n");
+                                    for (int i = 0; i < lines.length; i++) {
+                                        System.out.printf("%d: %s\n", i + 1, lines[i]);
+                                    }
+                                } else {
+                                    // Para otros tipos, mostrar los primeros 500 caracteres
+                                    if (content.length() > 500) {
+                                        System.out.println(content.substring(0, 500) + "...");
+                                        System.out.println("\n[Contenido truncado - " + content.length() + " caracteres totales]");
+                                    } else {
+                                        System.out.println(content);
+                                    }
+                                }
+                                
+                                System.out.println("========================================");
+                                System.out.println("✅ Lectura completada. No se crearon archivos temporales.");
+                                
+                            } catch (SecurityException e) {
+                                System.err.println("❌ Error de autenticación: " + e.getMessage());
+                                System.err.println("💡 Verifica que la contraseña sea correcta.");
+                            } catch (Exception e) {
+                                System.err.println("❌ Error al leer el archivo: " + e.getMessage());
+                                System.err.println("💡 El archivo podría estar corrupto o usar una contraseña diferente.");
+                            }
+                            
+                            Utils.pauseForKeyPress(scanner);
                         }
                         break;
                     case "7":
                         Utils.clearConsole();
-                        handlePasswordManagement(cipherBox, scanner);
+                        File unlockedFile = Utils.listFiles(DATA_DIR_DECRYPT, scanner);
+                        String alias = unlockedFile.getName().split("\\.")[0];
+                        if (unlockedFile != null) {
+                            try {
+                                String extension = cipherBox.decryptExtension(alias);
+                                System.out.print(
+                                        "La extensión original del archivo es: " + extension
+                                                + ". ¿Deseas cambiarla? (s/n): ");
+                                String choice2 = scanner.nextLine();
+                                if (choice2.equalsIgnoreCase("s")) {
+                                    Utils.convertExtension(unlockedFile, extension);
+                                }
+                            } catch (Exception e) {
+                                System.err.println("❌ Error al procesar el archivo: " + e.getMessage());
+                                Utils.pauseForKeyPress(scanner);
+                            }
+                        }
                         break;
                     case "8":
                         Utils.clearConsole();
-                        displayStoredAliases(cipherBox, scanner);
+                        handlePasswordManagement(cipherBox, scanner);
                         break;
                     case "9":
                         Utils.clearConsole();
-                        System.out.println("Cerrando conexiones y saliendo del programa...");
+                        displayStoredAliases(cipherBox, scanner);
+                        break;
+                    case "10":
+                        Utils.clearConsole();
+                        System.out.println("🔐 Cerrando conexiones y limpiando archivos temporales...");
                         cipherBox.close();
+                        System.out.println("✅ Programa cerrado de forma segura.");
                         Utils.pauseForKeyPress(scanner);
                         return;
 

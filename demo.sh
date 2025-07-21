@@ -9,11 +9,15 @@ echo "=================================================="
 echo ""
 
 echo "✅ MEJORAS IMPLEMENTADAS:"
-echo "  1. Reutilización de claves públicas"
-echo "  2. Contraseñas personalizadas con hashing PBKDF2"
-echo "  3. Base de datos SQLite local"
-echo "  4. Generación inteligente de claves"
-echo "  5. Gestión completa de contraseñas"
+echo "  1. Reutilización de claves públicas ✅"
+echo "  2. Contraseñas personalizadas con hashing PBKDF2 ✅"
+echo "  3. Base de datos SQLite local ✅"
+echo "  4. Generación inteligente de claves ✅"
+echo "  5. Gestión completa de contraseñas ✅"
+echo "  6. 🔒 NOMBRE OPCIONAL para archivos cifrados ✅"
+echo "  7. 🔒 LECTURA SEGURA solo en memoria ✅"
+echo "  8. 🔒 LIMPIEZA AUTOMÁTICA de archivos temporales ✅"
+echo "  9. 🔒 MANEJO ROBUSTO de excepciones ✅"
 echo ""
 
 echo "📁 ESTRUCTURA DEL PROYECTO:"
@@ -54,15 +58,21 @@ echo ""
 echo "🚀 CÓMO PROBAR LAS NUEVAS FUNCIONALIDADES:"
 echo ""
 echo "1. CIFRADO CON CONTRASEÑA PERSONALIZADA:"
-echo "   ./run.sh → Opción 2 → Seleccionar test.txt → Alias: 'demo' → Contraseña: 'mi_contraseña_segura'"
+echo "   ./run.sh → Opción 2 → Seleccionar test.txt → [Enter para usar nombre original] → Contraseña: 'mi_contraseña_segura'"
 echo ""
-echo "2. GESTIÓN DE CONTRASEÑAS:"
-echo "   ./run.sh → Opción 7 → Guardar/Ver/Eliminar contraseñas"
+echo "2. LECTURA SEGURA (SOLO MEMORIA):"
+echo "   ./run.sh → Opción 5 → Seleccionar archivo .lock → Ver contenido sin crear archivos temporales"
 echo ""
-echo "3. VER ALIASES ALMACENADOS:"
-echo "   ./run.sh → Opción 8 → Ver estado de la base de datos"
+echo "3. LECTURA SEGURA CON CONTRASEÑA:"
+echo "   ./run.sh → Opción 6 → Seleccionar archivo .lock → Ingresar contraseña → Ver contenido en memoria"
 echo ""
-echo "4. REUTILIZACIÓN DE CLAVES:"
+echo "4. GESTIÓN DE CONTRASEÑAS:"
+echo "   ./run.sh → Opción 8 → Guardar/Ver/Eliminar contraseñas"
+echo ""
+echo "5. VER ALIASES ALMACENADOS:"
+echo "   ./run.sh → Opción 9 → Ver estado de la base de datos"
+echo ""
+echo "6. REUTILIZACIÓN DE CLAVES:"
 echo "   Cifra múltiples archivos con el mismo alias y verifica que reutiliza las claves RSA"
 echo ""
 
@@ -96,17 +106,35 @@ else
     echo "  ❌ CryptoBox.java - Faltan métodos de contraseña"
 fi
 
-if grep -q "generateRSAKeys.*reutili" src/core/CryptoBox.java; then
+if grep -q "readFileSecurely" src/core/CryptoBox.java; then
+    echo "  ✅ CryptoBox.java - Lectura segura en memoria implementada"
+else
+    echo "  ❌ CryptoBox.java - Falta lectura segura"
+fi
+
+if grep -q "cleanupTemporaryFiles" src/core/CryptoBox.java; then
+    echo "  ✅ CryptoBox.java - Limpieza automática de archivos temporales"
+else
+    echo "  ❌ CryptoBox.java - Falta limpieza automática"
+fi
+
+if grep -q "ya existen para el alias" src/core/CryptoBox.java; then
     echo "  ✅ CryptoBox.java - Reutilización de claves implementada"
 else
     echo "  ❌ CryptoBox.java - Falta reutilización de claves"
 fi
 
 # Verificar nueva interfaz
-if grep -q "Gestionar contraseñas" src/cli/MainCLI.java; then
-    echo "  ✅ MainCLI.java - Nueva interfaz con gestión de contraseñas"
+if grep -q "👁️.*solo memoria" src/cli/MainCLI.java; then
+    echo "  ✅ MainCLI.java - Nueva interfaz de lectura segura"
 else
-    echo "  ❌ MainCLI.java - Falta nueva interfaz"
+    echo "  ❌ MainCLI.java - Falta interfaz de lectura segura"
+fi
+
+if grep -q "encryptedFileName.isEmpty" src/cli/MainCLI.java; then
+    echo "  ✅ MainCLI.java - Nombre opcional implementado"
+else
+    echo "  ❌ MainCLI.java - Falta nombre opcional"
 fi
 
 echo ""

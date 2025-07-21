@@ -11,5 +11,5 @@ fi
 echo "Iniciando CryptoBox..."
 echo "=========================================="
 
-# Ejecutar con SQLite en el classpath
-java -cp "bin:lib/sqlite-jdbc.jar" App 
+# Ejecutar con SQLite y SLF4J en el classpath
+java -cp "bin:lib/sqlite-jdbc.jar:lib/slf4j-api.jar:lib/slf4j-simple.jar" App 

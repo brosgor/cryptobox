@@ -174,4 +174,11 @@ public class PasswordManager {
             return originalSalt;
         }
     }
+
+    /**
+     * Obtiene el DatabaseManager para operaciones directas (uso interno)
+     */
+    protected DatabaseManager getDatabaseManager() {
+        return dbManager;
+    }
 } 
