@@ -22,30 +22,59 @@ import java.util.Base64;
 
 public class CryptoBox {
     private final String vaultDir;
-    private final String password; // Declarar la variable password
+    private String password; // Variable de contraseña dinámica
+    private final PasswordManager passwordManager;
 
     public CryptoBox() {
         this.vaultDir = "src/data/";
-        this.password = "BROSGOR123";
+        this.password = "BROSGOR123"; // Contraseña por defecto
+        this.passwordManager = new PasswordManager();
     }
 
     public CryptoBox(String vaultDir, String password) {
         this.vaultDir = vaultDir;
-        this.password = password; // Inicializar la variable password
+        this.password = password;
+        this.passwordManager = new PasswordManager();
     }
 
-    // Método para generar claves RSA
+    public CryptoBox(String vaultDir, String password, PasswordManager passwordManager) {
+        this.vaultDir = vaultDir;
+        this.password = password;
+        this.passwordManager = passwordManager != null ? passwordManager : new PasswordManager();
+    }
+
+    // Método para generar claves RSA (solo si no existen)
     public void generateRSAKeys(String alias) throws Exception {
+        String privateKeyPath = vaultDir + "key/" + alias + ".private.key";
+        String publicKeyPath = vaultDir + "key/" + alias + ".public.key";
+        
+        // Verificar si las claves ya existen
+        File privateKeyFile = new File(privateKeyPath);
+        File publicKeyFile = new File(publicKeyPath);
+        
+        if (privateKeyFile.exists() && publicKeyFile.exists()) {
+            System.out.println("Las claves RSA ya existen para el alias: " + alias + ". Reutilizando claves existentes.");
+            return;
+        }
+        
+        // Generar nuevas claves solo si no existen
         KeyPairGenerator keyPairGen = KeyPairGenerator.getInstance("RSA");
         keyPairGen.initialize(2048);
         KeyPair pair = keyPairGen.generateKeyPair();
         PrivateKey privateKey = pair.getPrivate();
         PublicKey publicKey = pair.getPublic();
 
-        saveKey(privateKey.getEncoded(), vaultDir + "key/" + alias + ".private.key");
-        saveKey(publicKey.getEncoded(), vaultDir + "key/" + alias + ".public.key");
+        saveKey(privateKey.getEncoded(), privateKeyPath);
+        saveKey(publicKey.getEncoded(), publicKeyPath);
 
-        System.out.println("Claves RSA generadas y guardadas.");
+        System.out.println("Nuevas claves RSA generadas y guardadas para el alias: " + alias);
+    }
+
+    // Método para verificar si existen claves para un alias
+    public boolean hasKeys(String alias) {
+        File privateKeyFile = new File(vaultDir + "key/" + alias + ".private.key");
+        File publicKeyFile = new File(vaultDir + "key/" + alias + ".public.key");
+        return privateKeyFile.exists() && publicKeyFile.exists();
     }
 
     // Método para guardar las claves en archivos (Codificación Base64 y cifrado con
@@ -118,7 +147,7 @@ public class CryptoBox {
 
     // Método para cifrar un archivo usando AES y RSA
     public void lockFile(String originalFilePath, String alias) throws Exception {
-        // Generar claves RSA
+        // Generar claves RSA solo si no existen (reutilización)
         generateRSAKeys(alias);
 
         // Leer clave pública
@@ -254,5 +283,88 @@ public class CryptoBox {
             extension = filePath.substring(i + 1);
         }
         return extension;
+    }
+
+    // Método para cifrar un archivo con contraseña personalizada
+    public void lockFileWithPassword(String originalFilePath, String alias, String userPassword) throws Exception {
+        // Guardar la contraseña en la base de datos si no existe
+        if (!passwordManager.verifyPasswordFromDB(alias, userPassword)) {
+            passwordManager.savePassword(alias, userPassword);
+        }
+        
+        // Usar la contraseña personalizada temporalmente
+        String originalPassword = this.password;
+        this.password = passwordManager.getEncryptionPassword(alias, userPassword);
+        
+        try {
+            lockFile(originalFilePath, alias);
+        } finally {
+            // Restaurar la contraseña original
+            this.password = originalPassword;
+        }
+    }
+
+    // Método para descifrar un archivo con contraseña personalizada
+    public DataFile unlockFileWithPassword(String encryptedFilePath, String alias, String userPassword) throws Exception {
+        // Verificar la contraseña contra la base de datos
+        if (!passwordManager.verifyPasswordFromDB(alias, userPassword)) {
+            throw new SecurityException("Contraseña incorrecta para el alias: " + alias);
+        }
+        
+        // Usar la contraseña personalizada temporalmente
+        String originalPassword = this.password;
+        this.password = passwordManager.getEncryptionPassword(alias, userPassword);
+        
+        try {
+            return unlockFile(encryptedFilePath, alias);
+        } finally {
+            // Restaurar la contraseña original
+            this.password = originalPassword;
+        }
+    }
+
+    // Método para obtener contraseña derivada (compatible con BD y archivos)
+    public String getEffectivePassword(String alias, String userPassword) {
+        try {
+            // Intentar usar la base de datos primero
+            if (passwordManager.hasStoredPasswords()) {
+                String derivedPassword = passwordManager.getEncryptionPassword(alias, userPassword);
+                if (derivedPassword != null) {
+                    return derivedPassword;
+                }
+            }
+        } catch (Exception e) {
+            System.out.println("Error al acceder a BD, usando contraseña por defecto: " + e.getMessage());
+        }
+        
+        // Fallback: usar contraseña por defecto para compatibilidad con archivos existentes
+        return this.password;
+    }
+
+    // Método para listar aliases disponibles en la base de datos
+    public java.util.List<String> getStoredAliases() {
+        return passwordManager.getAllAliases();
+    }
+
+    // Método para verificar si hay contraseñas almacenadas
+    public boolean hasStoredPasswords() {
+        return passwordManager.hasStoredPasswords();
+    }
+
+    // Método para guardar nueva contraseña
+    public boolean savePassword(String alias, String password) {
+        return passwordManager.savePassword(alias, password);
+    }
+
+    // Método para eliminar contraseña
+    public boolean deletePassword(String alias) {
+        return passwordManager.deletePassword(alias);
+    }
+
+    // Método para cerrar recursos
+    public void close() {
+        if (passwordManager != null) {
+            passwordManager.close();
+        }
     }
 }

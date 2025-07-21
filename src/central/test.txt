@@ -1,0 +1,17 @@
+Este es un archivo de prueba para CryptoBox mejorado.
+
+Funcionalidades a probar:
+1. Cifrado básico (modo legacy)
+2. Cifrado con contraseña personalizada
+3. Descifrado básico
+4. Descifrado con contraseña personalizada
+5. Gestión de contraseñas en base de datos
+6. Reutilización de claves RSA
+
+El sistema ahora soporta:
+- Contraseñas personalizadas con hashing PBKDF2
+- Base de datos SQLite local
+- Reutilización inteligente de claves
+- Gestión completa de aliases
+
+¡Probemos todas estas características! 
